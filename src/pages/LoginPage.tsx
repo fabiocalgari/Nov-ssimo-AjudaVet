@@ -29,6 +29,7 @@ export default function LoginPage() {
         throw new Error(data.error || 'Erro ao entrar');
       }
 
+      if (data.sessionId) localStorage.setItem('sessionId', data.sessionId);
       login(data.user);
       if (data.user.role === 'admin') {
         navigate('/admin');

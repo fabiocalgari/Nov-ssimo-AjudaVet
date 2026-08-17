@@ -34,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = (userData: User) => setUser(userData);
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    localStorage.removeItem('sessionId');
     setUser(null);
   };
 

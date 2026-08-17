@@ -56,13 +56,18 @@ const genAI = new GoogleGenAI({
 
 // Middleware for authentication
 const requireAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (!req.session.userId || !req.session.sessionId) {
+  let sessionId = req.session?.sessionId;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    sessionId = authHeader.substring(7);
+  }
+  if (!sessionId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
-    const user = await db.select().from(users).where(eq(users.id, req.session.userId)).limit(1);
-    if (!user.length || user[0].currentSessionId !== req.session.sessionId) {
-      req.session.destroy(() => {});
+    const user = await db.select().from(users).where(eq(users.currentSessionId, sessionId)).limit(1);
+    if (!user.length) {
+      if (req.session) req.session.destroy(() => {});
       return res.status(401).json({ error: 'Sessão inválida ou expirada. Este usuário pode estar conectado em outro dispositivo.' });
     }
     if (user[0].status !== 'ATIVO' && user[0].role !== 'admin') {
@@ -171,19 +176,21 @@ app.post('/api/auth/login', async (req, res) => {
     req.session.userId = user[0].id;
     req.session.sessionId = sessionId;
     
-    res.json({ user: { id: user[0].id, name: user[0].name, email: user[0].email, role: user[0].role } });
+    res.json({ sessionId, user: { id: user[0].id, name: user[0].name, email: user[0].email, role: user[0].role } });
   } catch (err) {
     res.status(500).json({ error: 'Erro no servidor' });
   }
 });
 
-app.post('/api/auth/logout', async (req, res) => {
-  if (req.session.userId) {
-    await db.update(users).set({ currentSessionId: null }).where(eq(users.id, req.session.userId));
-  }
-  req.session.destroy(() => {
+app.post('/api/auth/logout', requireAuth, async (req, res) => {
+  await db.update(users).set({ currentSessionId: null }).where(eq(users.id, req.user.id));
+  if (req.session) {
+    req.session.destroy(() => {
+      res.json({ message: 'Logout success' });
+    });
+  } else {
     res.json({ message: 'Logout success' });
-  });
+  }
 });
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
